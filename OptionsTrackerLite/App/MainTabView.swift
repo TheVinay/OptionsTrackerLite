@@ -5,7 +5,8 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
-            // Profile / Home
+
+            // Profile tab
             NavigationStack {
                 RootView(profiles: $profiles)
             }
@@ -13,7 +14,7 @@ struct MainTabView: View {
                 Label("Profile", systemImage: "person.crop.circle")
             }
 
-            // Portfolios
+            // Portfolios tab
             NavigationStack {
                 PortfoliosView(profiles: $profiles)
             }
@@ -21,7 +22,7 @@ struct MainTabView: View {
                 Label("Portfolios", systemImage: "person.3")
             }
 
-            // All Trades
+            // All Trades tab
             NavigationStack {
                 AllTradesView(profiles: $profiles)
             }
@@ -29,7 +30,15 @@ struct MainTabView: View {
                 Label("All Trades", systemImage: "rectangle.stack")
             }
 
-            // Learn
+            // NEW Analytics tab
+            NavigationStack {
+                AnalyticsTabView(profiles: profiles)
+            }
+            .tabItem {
+                Label("Analytics", systemImage: "chart.bar.doc.horizontal")
+            }
+
+            // Learn tab
             NavigationStack {
                 LearnView()
             }
@@ -38,8 +47,4 @@ struct MainTabView: View {
             }
         }
     }
-}
-
-#Preview {
-    MainTabView()
 }

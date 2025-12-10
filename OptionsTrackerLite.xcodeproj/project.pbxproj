@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		8429A8962EE8F29D003C94EA /* ClientCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8429A8952EE8F29D003C94EA /* ClientCalendarView.swift */; };
+		8490D01F2EE9644500351B1C /* AnalyticsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8490D01E2EE9644500351B1C /* AnalyticsTabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,7 @@
 		8429A7F12EE69761003C94EA /* OptionsTrackerLiteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OptionsTrackerLiteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8429A7FB2EE69761003C94EA /* OptionsTrackerLiteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OptionsTrackerLiteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8429A8952EE8F29D003C94EA /* ClientCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientCalendarView.swift; sourceTree = "<group>"; };
+		8490D01E2EE9644500351B1C /* AnalyticsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsTabView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -80,6 +82,7 @@
 		8429A7D82EE6975E003C94EA = {
 			isa = PBXGroup;
 			children = (
+				8490D01E2EE9644500351B1C /* AnalyticsTabView.swift */,
 				8429A8952EE8F29D003C94EA /* ClientCalendarView.swift */,
 				8429A7E32EE6975E003C94EA /* OptionsTrackerLite */,
 				8429A7F42EE69761003C94EA /* OptionsTrackerLiteTests */,
@@ -243,6 +246,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8429A8962EE8F29D003C94EA /* ClientCalendarView.swift in Sources */,
+				8490D01F2EE9644500351B1C /* AnalyticsTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
