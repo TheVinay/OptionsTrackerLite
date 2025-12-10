@@ -63,7 +63,6 @@ struct ClientDetailView: View {
         .sheet(isPresented: $showNewTrade) {
             NavigationStack {
                 NewTradeView(
-                    profile: $profile,
                     recentTickers: recentTickers,
                     onSave: { newTrade in
                         profile.trades.append(newTrade)
