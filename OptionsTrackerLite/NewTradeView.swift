@@ -2,209 +2,129 @@ import SwiftUI
 
 struct NewTradeView: View {
 
-    // We don't actually need the profile yet, so we drop it.
-    // The parent passes a closure to append the new Trade.
+    // We no longer take `profile` here – the caller handles appending.
     let recentTickers: [String]
     let onSave: (Trade) -> Void
 
     // BASIC
     @State private var ticker: String = ""
-    @State private var filteredTickers: [String] = []
-    @State private var showTickerSuggestions = false
-
-    @State private var selectedType: OptionType = .coveredCall
+    @State private var type: OptionType = .coveredCall
     @State private var tradeDate: Date = .now
-    @State private var expirationDate: Date = .now.addingTimeInterval(86400 * 30)
+    @State private var expirationDate: Date = Calendar.current.date(
+        byAdding: .day,
+        value: 30,
+        to: .now
+    ) ?? .now
 
-    // ADVANCED – stored as text for easier editing
-    @State private var strikeText: String = ""
-    @State private var quantityText: String = "1"
-    @State private var premiumText: String = ""
+    // ADVANCED – common across Call / Put / Covered Call / CSP
+    @State private var strikePrice: Double?
+    @State private var quantity: Int = 1
+    @State private var contractPrice: Double?
 
-    @State private var stockEntryPriceText: String = ""
-    @State private var stockCurrentPriceText: String = ""
+    @State private var stopLossPercent: Double?
+    @State private var targetPercent: Double?
 
-    @State private var stopLossPercentText: String = ""
-    @State private var targetPercentText: String = ""
+    @State private var stockEntryPrice: Double?
+    @State private var stockCurrentPrice: Double?
+
+    // Ticker suggestions (simple “Stocks app–style” pill row)
+    @State private var filteredTickers: [String] = []
+    @State private var showTickerSuggestions: Bool = false
 
     @Environment(\.dismiss) private var dismiss
-
-    // MARK: - Parsed values
-
-    private var quantityValue: Int {
-        Int(quantityText) ?? 0
-    }
-
-    private var premiumValue: Double {
-        Double(premiumText) ?? 0
-    }
-
-    private var strikeValue: Double? {
-        Double(strikeText)
-    }
-
-    private var stockEntryPriceValue: Double? {
-        Double(stockEntryPriceText)
-    }
-
-    private var stockCurrentPriceValue: Double? {
-        Double(stockCurrentPriceText)
-    }
-
-    private var stopLossPercentValue: Double? {
-        Double(stopLossPercentText)
-    }
-
-    private var targetPercentValue: Double? {
-        Double(targetPercentText)
-    }
-
-    /// Only for Covered Calls: visible derived total premium
-    private var coveredCallTotalPremium: Double {
-        premiumValue * 100.0 * Double(max(quantityValue, 0))
-    }
-
-    private var canSave: Bool {
-        !ticker.trimmingCharacters(in: .whitespaces).isEmpty &&
-        premiumValue > 0 &&
-        quantityValue > 0
-    }
 
     var body: some View {
         Form {
             basicSection
             advancedSection
+
+            Section {
+                Button("Save Trade") {
+                    handleSave()
+                }
+                .disabled(!canSave)
+            }
         }
         .navigationTitle("New Trade")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { saveTrade() }
-                    .disabled(!canSave)
-            }
-        }
-        .onChange(of: ticker) { newValue in
-            updateTickerSuggestions(for: newValue)
-        }
     }
 
     // MARK: - Sections
 
     private var basicSection: some View {
         Section("Basic") {
-            tickerRow
-            typeRow
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Ticker", text: $ticker)
+                    .autocapitalization(.allCharacters)
+                    .onChange(of: ticker) { newValue in
+                        updateTickerSuggestions(for: newValue)
+                    }
 
-            DatePicker("Trade date", selection: $tradeDate, displayedComponents: .date)
-            DatePicker("Expiration", selection: $expirationDate, displayedComponents: .date)
-
-            // ONLY Covered Call: show visible derived total premium
-            if selectedType == .coveredCall {
-                HStack {
-                    Text("Total premium")
-                    Spacer()
-                    Text(coveredCallTotalPremium, format: .currency(code: "USD"))
-                        .foregroundStyle(.secondary)
+                if showTickerSuggestions && !filteredTickers.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(filteredTickers, id: \.self) { symbol in
+                                Button(symbol) {
+                                    ticker = symbol
+                                    showTickerSuggestions = false
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color(.systemGray6))
+                                )
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                 }
             }
+
+            Picker("Type", selection: $type) {
+                ForEach(OptionType.allCases) { opt in
+                    Text(opt.rawValue).tag(opt)
+                }
+            }
+
+            DatePicker("Trade date", selection: $tradeDate, displayedComponents: .date)
+
+            DatePicker("Expiration", selection: $expirationDate, displayedComponents: .date)
         }
     }
 
     private var advancedSection: some View {
-        Section("Advanced") {
-            // These fields exist for ALL 3 types
-            TextField("Strike price", text: $strikeText)
+        Section("Advanced (optional)") {
+            TextField("Strike price", value: $strikePrice, format: .number)
                 .keyboardType(.decimalPad)
 
-            TextField("Quantity (contracts)", text: $quantityText)
+            TextField("Quantity (contracts)", value: $quantity, format: .number)
                 .keyboardType(.numberPad)
 
-            TextField("Contract price (per contract)", text: $premiumText)
+            TextField("Contract price", value: $contractPrice, format: .number)
                 .keyboardType(.decimalPad)
 
-            // Stock prices – shared for Covered Call / Call / Put
-            TextField("Stock price at entry", text: $stockEntryPriceText)
+            TextField("Stop loss %", value: $stopLossPercent, format: .number)
                 .keyboardType(.decimalPad)
 
-            TextField("Current stock price", text: $stockCurrentPriceText)
+            TextField("Target %", value: $targetPercent, format: .number)
                 .keyboardType(.decimalPad)
 
-            // Extra risk fields for all (you’ll add logic later)
-            Text("Risk management")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
+            TextField("Stock price at entry", value: $stockEntryPrice, format: .number)
+                .keyboardType(.decimalPad)
 
-            HStack {
-                TextField("Stop loss %", text: $stopLossPercentText)
-                    .keyboardType(.decimalPad)
-
-                TextField("Target %", text: $targetPercentText)
-                    .keyboardType(.decimalPad)
-            }
+            TextField("Current stock price", value: $stockCurrentPrice, format: .number)
+                .keyboardType(.decimalPad)
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Helpers
 
-    private var tickerRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Ticker")
-            TextField("Eg. NVDA", text: $ticker)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-
-            if showTickerSuggestions && !filteredTickers.isEmpty {
-                // Lightweight dropdown-like suggestions, similar to Stocks app
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(filteredTickers.prefix(5), id: \.self) { suggestion in
-                        Button {
-                            ticker = suggestion.uppercased()
-                            showTickerSuggestions = false
-                        } label: {
-                            HStack {
-                                Text(suggestion.uppercased())
-                                Spacer()
-                            }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 8)
-                        }
-                    }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.systemGray6))
-                )
-                .padding(.top, 4)
-            }
-        }
+    private var canSave: Bool {
+        !ticker.trimmingCharacters(in: .whitespaces).isEmpty &&
+        contractPrice != nil &&
+        strikePrice != nil
     }
-
-    private var typeRow: some View {
-        HStack {
-            Text("Type")
-            Spacer()
-            Menu {
-                ForEach(OptionType.allCases) { option in
-                    Button(option.rawValue) {
-                        selectedType = option
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(selectedType.rawValue)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                }
-                .foregroundColor(.blue)
-            }
-        }
-    }
-
-    // MARK: - Logic
 
     private func updateTickerSuggestions(for text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
@@ -214,38 +134,33 @@ struct NewTradeView: View {
             return
         }
 
-        let upper = trimmed.uppercased()
         filteredTickers = recentTickers
-            .filter { $0.uppercased().hasPrefix(upper) }
-            .sorted()
+            .filter { $0.localizedCaseInsensitiveContains(trimmed) }
 
         showTickerSuggestions = !filteredTickers.isEmpty
     }
 
-    private func saveTrade() {
-        let cleanTicker = ticker.trimmingCharacters(in: .whitespaces).uppercased()
-        guard !cleanTicker.isEmpty, premiumValue > 0, quantityValue > 0 else { return }
+    private func handleSave() {
+        guard let contractPrice = contractPrice,
+              let strike = strikePrice else { return }
 
-        let newTrade = Trade(
-            ticker: cleanTicker,
-            type: selectedType,
+        let premiumPerContract = contractPrice
+
+        let trade = Trade(
+            ticker: ticker.uppercased(),
+            type: type,
             tradeDate: tradeDate,
             expirationDate: expirationDate,
-            premium: premiumValue,
-            quantity: quantityValue,
-            // totalPremium left nil → Trade initializer will compute premium * 100 * quantity for you
-            strike: strikeValue,
-            underlyingPriceAtEntry: stockEntryPriceValue,
-            currentStockPrice: stockCurrentPriceValue,
-            isClosed: false,
-            realizedPL: nil,
-            simulated: false,
-            sendNotifications: true,
-            stopLossPercent: stopLossPercentValue,
-            targetPercent: targetPercentValue
+            premium: premiumPerContract,
+            quantity: quantity,
+            strike: strike,
+            underlyingPriceAtEntry: stockEntryPrice,
+            currentStockPrice: stockCurrentPrice,
+            stopLossPercent: stopLossPercent,
+            targetPercent: targetPercent
         )
 
-        onSave(newTrade)
+        onSave(trade)
         dismiss()
     }
 }
