@@ -1,7 +1,10 @@
 import SwiftUI
+import SwiftUI
+import SwiftData
 
 struct PortfoliosView: View {
-    @Binding var profiles: [ClientProfile]
+    @Query private var profiles: [ClientProfile]
+    @Environment(\.modelContext) private var modelContext
 
     @State private var searchText: String = ""
     @State private var showingNewClient = false
@@ -27,9 +30,7 @@ struct PortfoliosView: View {
             } else {
                 ForEach(filteredProfiles) { profile in
                     NavigationLink {
-                        if let binding = binding(for: profile) {
-                            ClientDetailView(profile: binding)
-                        }
+                        ClientDetailView(profile: profile)
                     } label: {
                         clientRow(profile)
                     }
@@ -51,20 +52,13 @@ struct PortfoliosView: View {
         .sheet(isPresented: $showingNewClient) {
             NavigationStack {
                 NewClientView { newClient in
-                    profiles.append(newClient)
+                    modelContext.insert(newClient)
                 }
             }
         }
     }
 
     // MARK: - Helpers
-
-    private func binding(for profile: ClientProfile) -> Binding<ClientProfile>? {
-        guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else {
-            return nil
-        }
-        return $profiles[index]
-    }
 
     private func clientRow(_ profile: ClientProfile) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -96,6 +90,7 @@ struct PortfoliosView: View {
 
 #Preview {
     NavigationStack {
-        PortfoliosView(profiles: .constant(ClientProfile.demoProfiles()))
+        PortfoliosView()
+            .modelContainer(for: [ClientProfile.self, Trade.self, TradeNote.self])
     }
 }

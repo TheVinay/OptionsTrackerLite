@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum AllTradesSection: String, CaseIterable, Identifiable {
     case trades = "Trades"
@@ -10,7 +11,8 @@ enum AllTradesSection: String, CaseIterable, Identifiable {
 }
 
 struct AllTradesView: View {
-    @Binding var profiles: [ClientProfile]
+    @Query private var profiles: [ClientProfile]
+    @Environment(\.modelContext) private var modelContext
 
     @State private var selectedSection: AllTradesSection = .trades
 

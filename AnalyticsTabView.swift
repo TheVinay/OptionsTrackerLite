@@ -201,7 +201,7 @@ struct AnalyticsTabView: View {
     private var headerSummaryCard: some View {
         let total = filteredClosed.count
         let wins = filteredClosed.filter { ($0.realizedPL ?? 0) >= 0 }.count
-        let losses = total - wins
+        let _ = total - wins  // losses count (not currently displayed)
         let totalPL = filteredClosed.compactMap(\.realizedPL).reduce(0, +)
         let winRate = total == 0 ? 0 : Double(wins)/Double(total)
 

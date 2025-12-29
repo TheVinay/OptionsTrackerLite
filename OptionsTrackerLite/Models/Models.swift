@@ -1,8 +1,11 @@
 import Foundation
 
+import SwiftUI
+import SwiftData
+
 // MARK: - Option types
 
-enum OptionType: String, CaseIterable, Identifiable, Hashable {
+enum OptionType: String, CaseIterable, Identifiable, Hashable, Codable {
     case call = "Call"
     case put = "Put"
     case coveredCall = "Covered Call"
@@ -13,10 +16,13 @@ enum OptionType: String, CaseIterable, Identifiable, Hashable {
 
 // MARK: - Trade notes (for detail view timeline, optional)
 
-struct TradeNote: Identifiable, Hashable {
-    let id: UUID
+@Model
+final class TradeNote {
+    var id: UUID
     var date: Date
     var text: String
+    
+    var trade: Trade?
 
     init(id: UUID = UUID(), date: Date = Date(), text: String) {
         self.id = id
@@ -25,63 +31,69 @@ struct TradeNote: Identifiable, Hashable {
     }
 }
 
+// Hashable conformance for backwards compatibility
+extension TradeNote: Hashable {
+    static func == (lhs: TradeNote, rhs: TradeNote) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 // MARK: - Trade model
 
-struct Trade: Identifiable, Hashable {
-    let id: UUID
-
+@Model
+final class Trade {
+    var id: UUID
     var ticker: String
-    var type: OptionType
-
+    var typeRawValue: String
     var tradeDate: Date
     var expirationDate: Date
-
-    /// Entry price per contract
     var premium: Double
-
-    /// Number of contracts
     var quantity: Int
-
-    /// Total premium in dollars (premium * 100 * quantity)
     var totalPremium: Double
-
-    /// Strike price, if applicable
     var strike: Double?
-
-    /// Stock price at entry (used for CSP / CC / calls / puts)
     var underlyingPriceAtEntry: Double?
-
-    /// For future use; some UIs may compute mark-to-market with this.
     var currentStockPrice: Double?
-
-    /// Whether this position is closed
     var isClosed: Bool
-
-    /// Realized P&L in dollars (optional until closed)
     var realizedPL: Double?
-
-    /// If this is just a simulation / idea
     var simulated: Bool
-
-    /// Whether to send alerts for this trade
     var sendNotifications: Bool
-
-    /// Optional rule-of-thumb risk management fields
     var stopLossPercent: Double?
     var targetPercent: Double?
-
-    /// Light-weight tagging
     var tags: [String]
-
-    /// Simple entry/exit criteria text (used in detail view)
     var entryCriteria: String?
     var exitCriteria: String?
-
-    /// Notes timeline
+    
+    // NEW: Commission tracking
+    var commissionOpen: Double?
+    var commissionClose: Double?
+    
+    @Relationship(deleteRule: .cascade, inverse: \TradeNote.trade)
     var notes: [TradeNote]
+    
+    var profile: ClientProfile?
+    
+    // Computed property for type
+    var type: OptionType {
+        get { OptionType(rawValue: typeRawValue) ?? .call }
+        set { typeRawValue = newValue.rawValue }
+    }
+    
+    // NEW: Total commission
+    var totalCommission: Double {
+        (commissionOpen ?? 0) + (commissionClose ?? 0)
+    }
+    
+    // NEW: Net P&L after commissions
+    var netPL: Double? {
+        guard let realizedPL = realizedPL else { return nil }
+        return realizedPL - totalCommission
+    }
 
     // MARK: - Initializer expected by NewTradeView
-
     init(
         id: UUID = UUID(),
         ticker: String,
@@ -103,11 +115,13 @@ struct Trade: Identifiable, Hashable {
         tags: [String] = [],
         entryCriteria: String? = nil,
         exitCriteria: String? = nil,
-        notes: [TradeNote] = []
+        notes: [TradeNote] = [],
+        commissionOpen: Double? = nil,
+        commissionClose: Double? = nil
     ) {
         self.id = id
         self.ticker = ticker
-        self.type = type
+        self.typeRawValue = type.rawValue
         self.tradeDate = tradeDate
         self.expirationDate = expirationDate
         self.premium = premium
@@ -126,6 +140,8 @@ struct Trade: Identifiable, Hashable {
         self.entryCriteria = entryCriteria
         self.exitCriteria = exitCriteria
         self.notes = notes
+        self.commissionOpen = commissionOpen
+        self.commissionClose = commissionClose
     }
 }
 
@@ -144,25 +160,38 @@ extension Trade {
     }
 }
 
+// Hashable conformance for backwards compatibility
+extension Trade: Hashable {
+    static func == (lhs: Trade, rhs: Trade) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 // MARK: - Client profile
 
-struct ClientProfile: Identifiable {
-    let id: UUID
-
+@Model
+final class ClientProfile {
+    var id: UUID
     var name: String
     var email: String?
     var phone: String?
     var address: String?
     var notes: String?
-
     var createdAt: Date
     var lastModified: Date
-
-    /// What types of strategies this client is interested in
-    var interestedTypes: Set<OptionType>
-
-    /// Trades for this client
+    var interestedTypesRaw: [String]
+    
+    @Relationship(deleteRule: .cascade, inverse: \Trade.profile)
     var trades: [Trade]
+    
+    var interestedTypes: Set<OptionType> {
+        get { Set(interestedTypesRaw.compactMap { OptionType(rawValue: $0) }) }
+        set { interestedTypesRaw = Array(newValue.map { $0.rawValue }) }
+    }
 
     init(
         id: UUID = UUID(),
@@ -184,7 +213,7 @@ struct ClientProfile: Identifiable {
         self.notes = notes
         self.createdAt = createdAt
         self.lastModified = lastModified
-        self.interestedTypes = interestedTypes
+        self.interestedTypesRaw = Array(interestedTypes.map { $0.rawValue })
         self.trades = trades
     }
 }
@@ -445,52 +474,150 @@ extension ClientProfile {
 
         // MARK: - Build client profiles
 
-        let alice = ClientProfile(
-            name: "Alice",
-            email: "alice@example.com",
-            phone: nil,
+        let johnDoe = ClientProfile(
+            name: "John Doe",
+            email: "john.doe@example.com",
+            phone: "555-0101",
             address: nil,
-            notes: "Income-focused, loves CSPs and NVDA PUTs.",
+            notes: "Conservative investor, prefers covered calls and cash-secured puts.",
             createdAt: daysFromToday(-90),
             lastModified: daysFromToday(-1),
-            interestedTypes: [.put, .cashSecuredPut],
+            interestedTypes: [.coveredCall, .cashSecuredPut],
             trades: [
-                nvdaPut1, nvdaPut2, nvdaPut3, nvdaPut4, nvdaPutLoss,
-                tslaCsp1, tslaCsp2, tslaCsp3, tslaCspLoss,
-                openNvdaPut
+                closedTrade(
+                    ticker: "AAPL",
+                    type: .coveredCall,
+                    daysAgo: 30,
+                    dte: 5,
+                    premium: 2.50,
+                    quantity: 5,
+                    strike: 180,
+                    entryPrice: 175,
+                    currentPrice: 178,
+                    realizedPL: 1250
+                ),
+                openTrade(
+                    ticker: "MSFT",
+                    type: .cashSecuredPut,
+                    daysAgo: 10,
+                    dte: 20,
+                    premium: 3.20,
+                    quantity: 3,
+                    strike: 400,
+                    entryPrice: 410,
+                    currentPrice: 408
+                ),
+                closedTrade(
+                    ticker: "TSLA",
+                    type: .coveredCall,
+                    daysAgo: 45,
+                    dte: 2,
+                    premium: 4.50,
+                    quantity: 2,
+                    strike: 250,
+                    entryPrice: 240,
+                    currentPrice: 245,
+                    realizedPL: 900
+                )
             ]
         )
 
-        let bob = ClientProfile(
-            name: "Bob",
-            email: "bob@example.com",
-            phone: nil,
+        let maryJane = ClientProfile(
+            name: "Mary Jane",
+            email: "mary.jane@example.com",
+            phone: "555-0202",
             address: nil,
-            notes: "Likes directional CALLs on NVDA and AAPL.",
+            notes: "Aggressive trader, focuses on tech stocks and short-term plays.",
             createdAt: daysFromToday(-120),
             lastModified: daysFromToday(-3),
-            interestedTypes: [.call, .coveredCall],
+            interestedTypes: [.call, .put],
             trades: [
-                nvdaCallLoss1, nvdaCallLoss2, nvdaCallLoss3, nvdaCallWin,
-                aaplCall1, aaplCall2, aaplCall3,
-                openTslaCc
+                closedTrade(
+                    ticker: "NVDA",
+                    type: .call,
+                    daysAgo: 15,
+                    dte: 3,
+                    premium: 5.00,
+                    quantity: 4,
+                    strike: 500,
+                    entryPrice: 480,
+                    currentPrice: 510,
+                    realizedPL: 2000
+                ),
+                closedTrade(
+                    ticker: "AMD",
+                    type: .put,
+                    daysAgo: 25,
+                    dte: 1,
+                    premium: 3.80,
+                    quantity: 3,
+                    strike: 140,
+                    entryPrice: 145,
+                    currentPrice: 138,
+                    realizedPL: -450
+                ),
+                openTrade(
+                    ticker: "GOOGL",
+                    type: .call,
+                    daysAgo: 5,
+                    dte: 25,
+                    premium: 4.20,
+                    quantity: 2,
+                    strike: 150,
+                    entryPrice: 145,
+                    currentPrice: 148
+                )
             ]
         )
 
-        let vinay = ClientProfile(
-            name: "Vinay",
-            email: "vinay@example.com",
-            phone: nil,
+        let joshPosh = ClientProfile(
+            name: "Josh Posh",
+            email: "josh.posh@example.com",
+            phone: "555-0303",
             address: nil,
-            notes: "Mixed style – experimenting with AMD PUTs.",
+            notes: "Balanced approach, mixes income and growth strategies.",
             createdAt: daysFromToday(-60),
             lastModified: daysFromToday(-2),
-            interestedTypes: [.put, .cashSecuredPut],
+            interestedTypes: [.coveredCall, .call, .cashSecuredPut],
             trades: [
-                amdPut1, amdPut2
+                closedTrade(
+                    ticker: "SPY",
+                    type: .cashSecuredPut,
+                    daysAgo: 20,
+                    dte: 7,
+                    premium: 2.10,
+                    quantity: 10,
+                    strike: 450,
+                    entryPrice: 455,
+                    currentPrice: 452,
+                    realizedPL: 2100
+                ),
+                openTrade(
+                    ticker: "QQQ",
+                    type: .coveredCall,
+                    daysAgo: 12,
+                    dte: 18,
+                    premium: 3.50,
+                    quantity: 5,
+                    strike: 400,
+                    entryPrice: 390,
+                    currentPrice: 395
+                ),
+                closedTrade(
+                    ticker: "AMZN",
+                    type: .call,
+                    daysAgo: 35,
+                    dte: 4,
+                    premium: 6.50,
+                    quantity: 1,
+                    strike: 175,
+                    entryPrice: 170,
+                    currentPrice: 180,
+                    realizedPL: 650
+                )
             ]
         )
 
-        return [alice, bob, vinay]
+        return [johnDoe, maryJane, joshPosh]
     }
 }

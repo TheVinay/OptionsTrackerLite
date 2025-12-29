@@ -24,7 +24,7 @@ enum ClientStatusFilter: String, CaseIterable {
 }
 
 struct ClientDetailView: View {
-    @Binding var profile: ClientProfile
+    @Bindable var profile: ClientProfile
 
     @State private var selectedSection: ClientDetailSection = .trades
     @State private var showNewTrade = false
@@ -102,10 +102,7 @@ struct ClientDetailView: View {
                     message: "Client-level analytics, equity curves, and expectancy will appear here."
                 )
             case .tools:
-                comingSoonView(
-                    title: "Tools",
-                    message: "Rolling helpers and simulators will live in this tab later."
-                )
+                ClientToolsView(profile: profile)
             }
         }
         .navigationTitle(profile.name)
@@ -273,8 +270,7 @@ struct ClientDetailView: View {
 
 #Preview {
     NavigationStack {
-        ClientDetailView(
-            profile: .constant(ClientProfile.demoProfiles().first!)
-        )
+        ClientDetailView(profile: ClientProfile.demoProfiles().first!)
     }
+    .modelContainer(for: [ClientProfile.self, Trade.self, TradeNote.self])
 }

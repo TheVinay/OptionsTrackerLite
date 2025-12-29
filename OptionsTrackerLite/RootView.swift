@@ -1,9 +1,11 @@
 import SwiftUI
+import SwiftData
 
 /// Root "Profile" tab – your home screen.
 /// Shows your personal summary and a quick link into Portfolios.
 struct RootView: View {
-    @Binding var profiles: [ClientProfile]
+    @Query private var profiles: [ClientProfile]
+    @AppStorage("advisorName") private var advisorName = "Vinay Viswambharan"
 
     // MARK: - Aggregated stats
 
@@ -41,7 +43,7 @@ struct RootView: View {
                 Text("Profile")
                     .font(.largeTitle.bold())
 
-                Text("Your personal home screen. Later we can add your own stats, habits, and shortcuts here.")
+                Text("Your personal home screen. Track your trading performance and manage client portfolios.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -55,19 +57,28 @@ struct RootView: View {
                 // Simple avatar placeholder
                 ZStack {
                     Circle()
-                        .fill(Color.accentColor.opacity(0.15))
-                        .frame(width: 60, height: 60)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 64, height: 64)
 
-                    Text("VV") // you can swap to your initials / image later
+                    Text(advisorInitials)
                         .font(.title2.bold())
                         .foregroundColor(.accentColor)
                 }
+                .shadow(color: .accentColor.opacity(0.2), radius: 8, x: 0, y: 4)
+                .accessibilityLabel("Profile avatar")
+                .accessibilityValue(advisorInitials)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Vinay Viswambharan")
+                    Text(advisorName)
                         .font(.headline)
 
-                    Text("Options advisor & portfolio manager")
+                    Text("Options Portfolio Manager")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
@@ -84,7 +95,16 @@ struct RootView: View {
                 }
             }
             .padding(.vertical, 6)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Profile summary: \(advisorName), \(totalClients) clients, \(totalOpenTrades) open trades, realized profit and loss \(totalRealizedPL, format: .currency(code: "USD"))")
         }
+    }
+    
+    private var advisorInitials: String {
+        let parts = advisorName
+            .split(separator: " ")
+            .map { String($0.prefix(1)) }
+        return parts.prefix(2).joined().uppercased()
     }
 
     private func metricChip(title: String, value: String) -> some View {
@@ -126,24 +146,34 @@ struct RootView: View {
     private var portfoliosLinkSection: some View {
         Section {
             NavigationLink {
-                // Reuse the same Portfolios screen as the Portfolios tab
-                PortfoliosView(profiles: $profiles)
+                PortfoliosView()
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Portfolios")
-                        .font(.headline)
-                    Text("View and manage all client accounts.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Portfolios")
+                            .font(.headline)
+                        Text("View and manage all client accounts")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
                 .padding(.vertical, 6)
             }
+            .accessibilityLabel("Portfolios")
+            .accessibilityHint("View and manage all client portfolios. Double tap to open.")
         }
     }
 }
 
 #Preview {
     NavigationStack {
-        RootView(profiles: .constant(ClientProfile.demoProfiles()))
+        RootView()
+            .modelContainer(for: [ClientProfile.self, Trade.self, TradeNote.self])
     }
 }
